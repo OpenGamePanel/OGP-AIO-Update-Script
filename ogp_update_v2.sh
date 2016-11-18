@@ -7,6 +7,10 @@
 ##---------------------------------------------##
 ## FUNCTIONS                                   ##
 ##---------------------------------------------##
+function setGlobalVars(){  # Define important variables here
+	GitOGPWebURLBase="https://github.com/OpenGamePanel/OGP-Website"
+	GitOGPAgentURLBase="https://github.com/OpenGamePanel/OGP-Agent-Linux"
+}
 
 function importOGPDB(){
 	
@@ -152,6 +156,14 @@ function checkForSVN(){
 	which svn > /dev/null
 	if [ $? -eq 1 ]; then
 		echo -e "\nUpdate script unable to automatically install SVN on your system.\nPlease install the subversion (SVN) package and run this upgrade script again!"
+		exit 1
+	fi
+}
+
+function checkForGIT(){
+	which git > /dev/null
+	if [ $? -eq 1 ]; then
+		echo -e "\nUpdate script unable to automatically install GIT on your system.\nPlease install the git package and run this upgrade script again!"
 		exit 1
 	fi
 }
@@ -542,8 +554,7 @@ function installWeb(){
 					
 					# Copy new upload files into the directory and then run OGP's version
 					cd "$ogpdldir"
-					cd "trunk"
-					cd "upload"
+					cd "web"
 					
 					cp -Rf ./* "$OGP_WEB_PATH"
 					cd "$OGP_WEB_PATH"
@@ -583,14 +594,14 @@ function useCleanInstallUpdate(){
 					
 	# Install latest web panel version
 	cd "$ogpdldir"
-	cd "trunk"
+	cd "web"
 					 
 	if [ ! -e "$OGP_WEB_PATH" ]; then
 		mkdir -p "$OGP_WEB_PATH"
 	fi
 					  
 	# Copy latest files to OGP Web Path
-	cp -Rf upload/* "$OGP_WEB_PATH"
+	cp -Rf ./* "$OGP_WEB_PATH"
 	cd "$OGP_WEB_PATH"
 	cd includes
 	touch config.inc.php
@@ -796,6 +807,28 @@ function performSVNCheckout(){
 	fi
 }
 
+function performGITCheckoutWeb(){
+	git clone "${GitOGPWebURLBase}.git" web
+	if [ -e "web" ]; then
+		# Get the revision too
+		REVISION=$(curl -Lks "${GitOGPWebURLBase}/commits/master.atom" | grep -Eo "([a-f0-9]{40})" | head -n 1)
+		rm -rf "web/.git"
+	else
+		performGITCheckoutWeb
+	fi
+}
+
+function performGITCheckoutAgent(){
+	git clone "${GitOGPAgentURLBase}.git" agent
+	if [ -e "agent" ]; then
+		# Get the revision too
+		REVISIONAgent=$(curl -Lks "${GitOGPAgentURLBase}/commits/master.atom" | grep -Eo "([a-f0-9]{40})" | head -n 1)
+		rm -rf "agent/.git"
+	else
+		performGITCheckoutAgent
+	fi
+}
+
 function tmpDirPermsCheck(){
 	OGPWUTMPATH="/tmp/OGP_update/"
 	if [ ! -e "$OGPWUTMPATH" ]; then
@@ -841,6 +874,8 @@ if [ "$(id -u)" != "0" ]; then
    exit 1
 fi
 
+setGlobalVars
+
 # Install curl
 aptgetInstall curl
 if [ -z $(which curl) ]; then
@@ -848,7 +883,7 @@ if [ -z $(which curl) ]; then
 fi
 
 clear
-echo -e "----------------------------------\nOpen Game Panel Upgrader Script\n----------------------------------\nVersion 1.9\nUpdated: 5/14/2016\nBy OwN-3m-All (own3mall@gmail.com)\n\nThis script will create backups, update, and help you install the latest version of the Open Game Panel (OGP).\nIt handles both the web and agent installation scripts.\n\nThis is an upgrade script only! If you want to install OGP, go to http://www.opengamepanel.org for help!\n"
+echo -e "----------------------------------\nOpen Game Panel Upgrader Script\n----------------------------------\nVersion 1.9.1\nUpdated: 11/17/2016\nBy OwN-3m-All (own3mall@gmail.com)\n\nThis script will create backups, update, and help you install the latest version of the Open Game Panel (OGP).\nIt handles both the web and agent installation scripts.\n\nThis is an upgrade script only! If you want to install OGP, go to http://www.opengamepanel.org for help!\n"
 echo -n "Start the update process [y/n]: "
 read startScript
 startScript=$(echo "$startScript" | awk '{print tolower($0)}')
@@ -859,11 +894,12 @@ if [ ! -z "$startScript" ] && [ "$startScript" != "n" ]; then
   ORIGDIR=$(pwd)
   
   # Install SVN
-  echo -e "Installing subversion\n"
-  aptgetInstall subversion
+  echo -e "Installing subversion and git...\n"
+  aptgetInstall "subversion git"
   
-  # Check to make sure SVN is installed
+  # Check to make sure SVN and GIT are installed
   checkForSVN
+  checkForGIT
   
   # Make current version backups
   service ogp_agent stop
@@ -921,17 +957,10 @@ if [ ! -z "$startScript" ] && [ "$startScript" != "n" ]; then
   cd "$ogpdldir"
   rm -R ./*
   
-  SVN_URL="svn://svn.code.sf.net/p/hldstart/svn/trunk"
-  svn info ${SVN_URL}
-  if [ $? -eq 1 ]; then
-    echo "svn command failed: unable to access ${SVN_URL}";
-    exit 1;
-  fi
+  # Get it via Git
+  performGITCheckoutWeb
+  performGITCheckoutAgent
   
-  performSVNCheckout
-  
-  rm -Rf trunk/.svn
-  cd trunk
   cd agent
   
   # Print out information.
@@ -958,5 +987,3 @@ if [ ! -z "$startScript" ] && [ "$startScript" != "n" ]; then
   echo -e "\nUpdate operations complete and successful!"
 
 fi
-
-
